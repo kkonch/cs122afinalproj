@@ -449,8 +449,9 @@ def videos_viewed(rid):
         db = connect_db()
         cursor = db.cursor()
         cursor.execute("""
-            SELECT v.rid, v.ep_num, v.title, v.length,
-                   IFNULL(viewer_counts.count, 0) AS viewer_count
+            SELECT v.rid, v.ep_num, v.title,
+                   IFNULL(viewer_counts.count, 0) AS viewer_count,
+                   v.length
             FROM videos v
             LEFT JOIN (
                 SELECT s.rid, s.ep_num, COUNT(DISTINCT s.uid) AS count
@@ -467,6 +468,7 @@ def videos_viewed(rid):
     finally:
         cursor.close()
         db.close()
+
 
 
 
