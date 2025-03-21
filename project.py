@@ -364,18 +364,20 @@ def list_releases(uid):
         db = connect_db()
         cursor = db.cursor()
         cursor.execute("""
-            SELECT DISTINCT r.rid, r.genre, r.title
+            SELECT r.rid, r.genre, r.title
             FROM releases r
             JOIN reviews v ON r.rid = v.rid
             WHERE v.uid = %s
+            GROUP BY r.rid, r.genre, r.title
             ORDER BY r.title ASC
         """, (uid,))
         print_result(cursor)
     except:
-        print("Fail")
+        return "Fail"
     finally:
         cursor.close()
         db.close()
+
 
 # --- 9. popularRelease ---
 def popular_release(N):
