@@ -429,16 +429,17 @@ def videos_viewed(rid):
         db = connect_db()
         cursor = db.cursor()
         cursor.execute("""
-            SELECT v.rid, v.ep_num, v.title, v.length, COUNT(DISTINCT s.uid)
+            SELECT v.rid, v.ep_num, v.title, v.length,
+                   COUNT(DISTINCT s.uid) AS viewer_count
             FROM videos v
             LEFT JOIN sessions s ON v.rid = s.rid AND v.ep_num = s.ep_num
             WHERE v.rid = %s
-            GROUP BY v.rid, v.ep_num
-            ORDER BY v.rid DESC
+            GROUP BY v.rid, v.ep_num, v.title, v.length
+            ORDER BY v.rid DESC, v.ep_num ASC
         """, (rid,))
         print_result(cursor)
     except:
-        return "Fail"
+        print("Fail")
     finally:
         cursor.close()
         db.close()
