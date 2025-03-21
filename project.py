@@ -182,16 +182,29 @@ def import_data(folder):
 
         db.commit()
         print("Success")
+        #print_all_tables(cursor)
+
 
     except Exception as e:
         print("Fail")
-        print("Error:", e)
+        #print("Error:", e)
     finally:
         if cursor: cursor.close()
         if db: db.close()
 
 
 
+def print_all_tables(cursor):
+    table_names = [
+        "users", "producers", "viewers", "releases",
+        "movies", "series", "videos", "sessions", "reviews"
+    ]
+    for table in table_names:
+        print(f"\n--- {table.upper()} ---")
+        cursor.execute(f"SELECT * FROM {table}")
+        rows = cursor.fetchall()
+        for row in rows:
+            print(",".join(str(item) for item in row))
 
 # Example usage:
 # import_data("/path/to/your/csv/folder")
@@ -204,13 +217,13 @@ def insert_viewer(args):
 
         uid, email, nickname, street, city, state, zip_code, genres, joined_date, first, last, subscription = args
         cursor.execute("INSERT INTO users VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                       (uid, email, nickname, street, city, state, zip_code, genres, joined_date))
+               (uid, email, joined_date, nickname, street, city, state, zip_code, genres))
         cursor.execute("INSERT INTO viewers VALUES (%s, %s, %s, %s)", (uid, first, last, subscription))
 
         db.commit()
-        return "Success"
+        print("Success")
     except:
-        return "Fail"
+        print("Fail")
     finally:
         cursor.close()
         db.close()
@@ -228,11 +241,11 @@ def add_genre(uid, new_genre):
             updated = f"{current_genres};{new_genre}" if current_genres else new_genre
             cursor.execute("UPDATE users SET genres = %s WHERE uid = %s", (updated, uid))
             db.commit()
-            return "Success"
+            print("Success")
         else:
-            return "Fail"
+            print("Fail")
     except:
-        return "Fail"
+        print("Fail")
     finally:
         cursor.close()
         db.close()
@@ -245,9 +258,9 @@ def delete_viewer(uid):
         cursor.execute("DELETE FROM viewers WHERE uid = %s", (uid,))
         cursor.execute("DELETE FROM users WHERE uid = %s", (uid,))
         db.commit()
-        return "Success"
+        print("Success")
     except:
-        return "Fail"
+        print("Fail")
     finally:
         cursor.close()
         db.close()
@@ -264,30 +277,33 @@ Output:
 """
 # --- 5. insertMovie ---
 def insert_movie(rid, website_url):
-    print_all_movies()
     try:
         db = connect_db()
         cursor = db.cursor()
 
-        # Check if the release ID already exists
-        cursor.execute("SELECT 1 FROM releases WHERE rid = %s", (rid,))
+        # Check if a movie with this rid already exists
+        cursor.execute("SELECT 1 FROM movies WHERE rid = %s", (rid,))
         result = cursor.fetchone()
 
         if result:
-            print("Release ID already exists, skipping insert.")
-            return "Fail"
+            print("Fail")  # Don't insert duplicate movies
 
-        # Insert the movie with the given release ID and website URL
+        # Check if release exists before inserting movie (optional, since it's assumed)
+        cursor.execute("SELECT 1 FROM releases WHERE rid = %s", (rid,))
+        release_exists = cursor.fetchone()
+        if not release_exists:
+            return "Fail"  # Foreign key violation safety
+
+        # Insert movie
         cursor.execute("INSERT INTO movies (rid, website_url) VALUES (%s, %s)", (rid, website_url))
         db.commit()
-        print("Movie inserted successfully.")
-        return "Success"
-    except mysql.connector.Error as err:
-        print(f"Error: {err}")
-        return "Fail"
+        print("Success")
+    except mysql.connector.Error:
+        print("Fail")
     finally:
         cursor.close()
         db.close()
+
 
 def print_all_movies():
     try:
@@ -321,9 +337,9 @@ def insert_session(args):
         cursor = db.cursor()
         cursor.execute("INSERT INTO sessions VALUES (%s,%s,%s,%s,%s,%s,%s,%s)", args)
         db.commit()
-        return "Success"
+        print("Success")
     except:
-        return "Fail"
+        print("Fail")
     finally:
         cursor.close()
         db.close()
@@ -335,9 +351,9 @@ def update_release(rid, title):
         cursor = db.cursor()
         cursor.execute("UPDATE releases SET title = %s WHERE rid = %s", (title, rid))
         db.commit()
-        return "Success"
+        print("Success")
     except:
-        return "Fail"
+        print("Fail")
     finally:
         cursor.close()
         db.close()
@@ -356,7 +372,7 @@ def list_releases(uid):
         """, (uid,))
         print_result(cursor)
     except:
-        return "Fail"
+        print("Fail")
     finally:
         cursor.close()
         db.close()
@@ -367,11 +383,11 @@ def popular_release(N):
         db = connect_db()
         cursor = db.cursor()
         cursor.execute("""
-            SELECT r.rid, r.title, COUNT(rv.rvid) AS reviewCount
-            FROM releases r
-            LEFT JOIN reviews rv ON r.rid = rv.rid
-            GROUP BY r.rid, r.title
-            ORDER BY reviewCount DESC, r.rid ASC
+            SELECT r.rid, r.title, COUNT(*) AS reviewCount
+            FROM reviews v
+            JOIN releases r ON v.rid = r.rid
+            GROUP BY r.rid
+            ORDER BY reviewCount DESC, r.rid DESC
             LIMIT %s
         """, (N,))
         print_result(cursor)
@@ -396,7 +412,7 @@ def release_title(sid):
         """, (sid,))
         print_result(cursor)
     except:
-        return "Fail"
+        print("Fail")
     finally:
         cursor.close()
         db.close()
@@ -418,7 +434,7 @@ def active_viewer(N, start, end):
         """, (start, end, N))
         print_result(cursor)
     except:
-        return "Fail"
+        print("Fail")
     finally:
         cursor.close()
         db.close()
@@ -429,13 +445,12 @@ def videos_viewed(rid):
         db = connect_db()
         cursor = db.cursor()
         cursor.execute("""
-            SELECT v.rid, v.ep_num, v.title, v.length,
-                   COUNT(DISTINCT s.uid) AS viewer_count
+            SELECT v.rid, v.ep_num, v.title, v.length, COUNT(DISTINCT s.uid)
             FROM videos v
             LEFT JOIN sessions s ON v.rid = s.rid AND v.ep_num = s.ep_num
             WHERE v.rid = %s
-            GROUP BY v.rid, v.ep_num, v.title, v.length
-            ORDER BY v.rid DESC, v.ep_num ASC
+            GROUP BY v.rid, v.ep_num
+            ORDER BY v.rid DESC
         """, (rid,))
         print_result(cursor)
     except:
