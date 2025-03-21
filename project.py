@@ -29,13 +29,13 @@ def recreate_tables(cursor):
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         uid INT PRIMARY KEY,
-        email VARCHAR(255),
-        joined_date DATE,
-        nickname VARCHAR(255),
-        street VARCHAR(255),
-        city VARCHAR(255),
-        state VARCHAR(255),
-        zip VARCHAR(20),
+        email TEXT NOT NULL,
+        joined_date DATE NOT NULL,
+        nickname TEXT NOT NULL,
+        street TEXT,
+        city TEXT,
+        state TEXT,
+        zip TEXT,
         genres TEXT
     );
     """)
@@ -44,8 +44,8 @@ def recreate_tables(cursor):
     CREATE TABLE IF NOT EXISTS producers (
         uid INT PRIMARY KEY,
         bio TEXT,
-        company_name VARCHAR(255),
-        FOREIGN KEY (uid) REFERENCES users(uid)
+        company TEXT,
+        FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
     );
     """)
 
@@ -53,79 +53,86 @@ def recreate_tables(cursor):
     CREATE TABLE IF NOT EXISTS viewers (
         uid INT PRIMARY KEY,
         subscription ENUM('free', 'monthly', 'yearly'),
-        firstname VARCHAR(255),
-        lastname VARCHAR(255),
-        FOREIGN KEY (uid) REFERENCES users(uid)
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        FOREIGN KEY (uid) REFERENCES users(uid) ON DELETE CASCADE
     );
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS releases (
         rid INT PRIMARY KEY,
-        producer_uid INT,
-        title VARCHAR(255),
-        genre VARCHAR(255),
-        release_date DATE,
-        FOREIGN KEY (producer_uid) REFERENCES producers(uid)
+        producer_uid INT NOT NULL,
+        title TEXT NOT NULL,
+        genre TEXT NOT NULL,
+        release_date DATE NOT NULL,
+        FOREIGN KEY (producer_uid) REFERENCES producers(uid) ON DELETE CASCADE
     );
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS movies (
-        rid INT PRIMARY KEY,
-        website_url VARCHAR(255),
-        FOREIGN KEY (rid) REFERENCES releases(rid)
+        rid INT,
+        website_url TEXT,
+        PRIMARY KEY (rid),
+        FOREIGN KEY (rid) REFERENCES releases(rid) ON DELETE CASCADE
     );
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS series (
-        rid INT PRIMARY KEY,
+        rid INT,
         introduction TEXT,
-        FOREIGN KEY (rid) REFERENCES releases(rid)
+        PRIMARY KEY (rid),
+        FOREIGN KEY (rid) REFERENCES releases(rid) ON DELETE CASCADE
     );
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS videos (
         rid INT,
-        ep_num INT,
-        title VARCHAR(255),
-        length INT,
+        ep_num INT NOT NULL,
+        title TEXT NOT NULL,
+        length INT NOT NULL,
         PRIMARY KEY (rid, ep_num),
-        FOREIGN KEY (rid) REFERENCES releases(rid)
+        FOREIGN KEY (rid) REFERENCES releases(rid) ON DELETE CASCADE
     );
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS sessions (
         sid INT PRIMARY KEY,
-        uid INT,
-        rid INT,
-        ep_num INT,
-        initiate_at DATETIME,
-        leave_at DATETIME,
-        quality VARCHAR(10),
-        device VARCHAR(20),
-        FOREIGN KEY (uid) REFERENCES users(uid),
-        FOREIGN KEY (rid, ep_num) REFERENCES videos(rid, ep_num)
+        uid INT NOT NULL,
+        rid INT NOT NULL,
+        ep_num INT NOT NULL,
+        initiate_at DATETIME NOT NULL,
+        leave_at DATETIME NOT NULL,
+        quality ENUM('480p', '720p', '1080p'),
+        device ENUM('mobile', 'desktop'),
+        FOREIGN KEY (uid) REFERENCES viewers(uid) ON DELETE CASCADE,
+        FOREIGN KEY (rid, ep_num) REFERENCES videos(rid, ep_num) ON DELETE CASCADE
     );
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS reviews (
         rvid INT PRIMARY KEY,
-        uid INT,
-        rid INT,
-        rating INT,
+        uid INT NOT NULL,
+        rid INT NOT NULL,
+        rating DECIMAL(2, 1) NOT NULL CHECK (rating BETWEEN 0 AND 5),
         body TEXT,
-        posted_at DATETIME,
-        FOREIGN KEY (uid) REFERENCES users(uid),
-        FOREIGN KEY (rid) REFERENCES releases(rid)
+        posted_at DATETIME NOT NULL,
+        FOREIGN KEY (uid) REFERENCES viewers(uid) ON DELETE CASCADE,
+        FOREIGN KEY (rid) REFERENCES releases(rid) ON DELETE CASCADE
     );
     """)
 
+
 # --- 1. import ---
+
+import os
+import csv
+from datetime import datetime
 
 def import_data(folder):
     try:
@@ -154,36 +161,45 @@ def import_data(folder):
                         cursor.execute(
                             "INSERT INTO users (uid, email, joined_date, nickname, street, city, state, zip, genres) "
                             "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)", tuple(row))
+
                     elif table == "producers":
                         cursor.execute(
-                            "INSERT INTO producers (uid, bio, company_name) VALUES (%s,%s,%s)", tuple(row))
+                            "INSERT INTO producers (uid, bio, company) VALUES (%s,%s,%s)", tuple(row))
+
                     elif table == "viewers":
                         cursor.execute(
-                            "INSERT INTO viewers (uid, subscription, firstname, lastname) VALUES (%s,%s,%s,%s)", tuple(row))
+                            "INSERT INTO viewers (uid, subscription, first_name, last_name) "
+                            "VALUES (%s,%s,%s,%s)", tuple(row))
+
                     elif table == "releases":
                         cursor.execute(
-                            "INSERT INTO releases (rid, producer_uid, title, genre, release_date) VALUES (%s,%s,%s,%s,%s)", tuple(row))
+                            "INSERT INTO releases (rid, producer_uid, title, genre, release_date) "
+                            "VALUES (%s,%s,%s,%s,%s)", tuple(row))
+
                     elif table == "movies":
                         cursor.execute(
                             "INSERT INTO movies (rid, website_url) VALUES (%s,%s)", tuple(row))
+
                     elif table == "series":
                         cursor.execute(
                             "INSERT INTO series (rid, introduction) VALUES (%s,%s)", tuple(row))
+
                     elif table == "videos":
                         cursor.execute(
                             "INSERT INTO videos (rid, ep_num, title, length) VALUES (%s,%s,%s,%s)", tuple(row))
+
                     elif table == "sessions":
                         cursor.execute(
                             "INSERT INTO sessions (sid, uid, rid, ep_num, initiate_at, leave_at, quality, device) "
                             "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)", tuple(row))
+
                     elif table == "reviews":
                         cursor.execute(
-                            "INSERT INTO reviews (rvid, uid, rid, rating, body, posted_at) VALUES (%s,%s,%s,%s,%s,%s)", tuple(row))
+                            "INSERT INTO reviews (rvid, uid, rid, rating, body, posted_at) "
+                            "VALUES (%s,%s,%s,%s,%s,%s)", tuple(row))
 
         db.commit()
         print("Success")
-        #print_all_tables(cursor)
-
 
     except Exception as e:
         print("Fail")
@@ -191,6 +207,7 @@ def import_data(folder):
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
 
 
 
@@ -215,12 +232,10 @@ def insert_viewer(args):
         db = connect_db()
         cursor = db.cursor()
 
-
         uid, email, nickname, street, city, state, zip_code, genres, joined_date, first, last, subscription = args
         cursor.execute("INSERT INTO users VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
                (uid, email, joined_date, nickname, street, city, state, zip_code, genres))
         cursor.execute("INSERT INTO viewers VALUES (%s, %s, %s, %s)", (uid, subscription, first, last))
-
 
         db.commit()
         print("Success")
@@ -233,39 +248,66 @@ def insert_viewer(args):
 # --- 3. addGenre ---
 def add_genre(uid, new_genre):
     try:
+        uid = int(uid)
+        new_genre = new_genre.strip().lower()  # Optional: normalize case
+
+
         db = connect_db()
         cursor = db.cursor()
 
+
         cursor.execute("SELECT genres FROM users WHERE uid = %s", (uid,))
         result = cursor.fetchone()
-        if result:
-            current_genres = result[0]
-            updated = f"{current_genres};{new_genre}" if current_genres else new_genre
-            cursor.execute("UPDATE users SET genres = %s WHERE uid = %s", (updated, uid))
+
+
+        if result is not None:
+            current_genres = result[0] or ""
+            genre_list = [g.strip().lower() for g in current_genres.split(';') if g.strip()]
+
+
+            if new_genre in genre_list:
+                print("Fail")  # Already exists
+                return
+
+
+            updated_genres = ";".join(genre_list + [new_genre])
+            cursor.execute("UPDATE users SET genres = %s WHERE uid = %s", (updated_genres, uid))
             db.commit()
             print("Success")
         else:
             print("Fail")
-    except:
+    except Exception as e:
         print("Fail")
+        # print("Error:", e)  # Uncomment for debugging
     finally:
-        cursor.close()
-        db.close()
+        if cursor: cursor.close()
+        if db: db.close()
+
 
 # --- 4. deleteViewer ---
 def delete_viewer(uid):
     try:
         db = connect_db()
         cursor = db.cursor()
+        
+        # Delete the viewer record first
         cursor.execute("DELETE FROM viewers WHERE uid = %s", (uid,))
+        
+        # Now delete the user record
         cursor.execute("DELETE FROM users WHERE uid = %s", (uid,))
+        
+        # Commit the transaction
         db.commit()
+        
         print("Success")
-    except:
-        print("Fail")
+    except Exception as e:
+        # Catch specific exception and print error message for debugging
+        print(f"Fail")
     finally:
+        # Ensure the cursor and connection are closed
         cursor.close()
         db.close()
+
 
 """
 Insert movie
@@ -449,18 +491,12 @@ def videos_viewed(rid):
         db = connect_db()
         cursor = db.cursor()
         cursor.execute("""
-            SELECT v.rid, v.ep_num, v.title,
-                   IFNULL(viewer_counts.count, 0) AS viewer_count,
-                   v.length
+            SELECT v.rid, v.ep_num, v.title, v.length, COUNT(DISTINCT s.uid)
             FROM videos v
-            LEFT JOIN (
-                SELECT s.rid, s.ep_num, COUNT(DISTINCT s.uid) AS count
-                FROM sessions s
-                GROUP BY s.rid, s.ep_num
-            ) AS viewer_counts
-            ON v.rid = viewer_counts.rid AND v.ep_num = viewer_counts.ep_num
+            LEFT JOIN sessions s ON v.rid = s.rid AND v.ep_num = s.ep_num
             WHERE v.rid = %s
-            ORDER BY v.rid DESC, v.ep_num ASC
+            GROUP BY v.rid, v.ep_num
+            ORDER BY v.rid DESC
         """, (rid,))
         print_result(cursor)
     except:
@@ -468,9 +504,6 @@ def videos_viewed(rid):
     finally:
         cursor.close()
         db.close()
-
-
-
 
 # --- Main entry point ---
 if __name__ == '__main__':
