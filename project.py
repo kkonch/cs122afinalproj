@@ -468,22 +468,27 @@ def active_viewer(N, start, end):
     try:
         db = connect_db()
         cursor = db.cursor()
+
         cursor.execute("""
-            SELECT u.uid, v.firstname, v.lastname
+            SELECT s.uid, v.firstname, v.lastname
             FROM sessions s
             JOIN viewers v ON s.uid = v.uid
-            JOIN users u ON v.uid = u.uid
-            WHERE DATE(s.initiate_at) BETWEEN %s AND %s
-            GROUP BY s.uid
+            JOIN users u ON s.uid = u.uid
+            WHERE s.initiate_at BETWEEN %s AND %s
+            GROUP BY s.uid, v.firstname, v.lastname
             HAVING COUNT(*) >= %s
             ORDER BY s.uid ASC
-        """, (start, end, N))
+        """, (start, end, int(N)))
+
         print_result(cursor)
-    except:
+
+    except Exception as e:
         print("Fail")
+        # print("Error:", e)  # Uncomment to debug locally
     finally:
         cursor.close()
         db.close()
+
 
 # --- 12. videosViewed ---
 def videos_viewed(rid):
