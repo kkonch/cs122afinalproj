@@ -367,16 +367,16 @@ def popular_release(N):
         db = connect_db()
         cursor = db.cursor()
         cursor.execute("""
-            SELECT r.rid, r.title, COUNT(*) AS reviewCount
-            FROM reviews v
-            JOIN releases r ON v.rid = r.rid
-            GROUP BY r.rid
-            ORDER BY reviewCount DESC, r.rid DESC
+            SELECT r.rid, r.title, COUNT(rv.rvid) AS reviewCount
+            FROM releases r
+            LEFT JOIN reviews rv ON r.rid = rv.rid
+            GROUP BY r.rid, r.title
+            ORDER BY reviewCount DESC, r.rid ASC
             LIMIT %s
         """, (N,))
         print_result(cursor)
     except:
-        return "Fail"
+        print("Fail")
     finally:
         cursor.close()
         db.close()
