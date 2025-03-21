@@ -463,27 +463,28 @@ def release_title(sid):
         cursor.close()
         db.close()
 
+# --- 11. activeViewer ---
 def active_viewer(N, start, end):
     try:
         db = connect_db()
         cursor = db.cursor()
         cursor.execute("""
-            SELECT u.uid, v.firstname, v.lastname
+            SELECT u.uid, v.first_name, v.last_name
             FROM sessions s
             JOIN viewers v ON s.uid = v.uid
             JOIN users u ON v.uid = u.uid
             WHERE DATE(s.initiate_at) BETWEEN %s AND %s
-            GROUP BY u.uid, v.firstname, v.lastname
+            GROUP BY s.uid
             HAVING COUNT(*) >= %s
-            ORDER BY u.uid ASC
-        """, (start, end, int(N)))
+            ORDER BY s.uid ASC
+        """, (start, end, N))
         print_result(cursor)
+        # print("Success")
     except:
         print("Fail")
     finally:
         cursor.close()
         db.close()
-
 
 # --- 12. videosViewed ---
 def videos_viewed(rid):
@@ -491,25 +492,15 @@ def videos_viewed(rid):
         db = connect_db()
         cursor = db.cursor()
         cursor.execute("""
-            SELECT v.rid, v.ep_num, v.title, v.length,
-                   COUNT(DISTINCT s.uid) AS viewer_count
+            SELECT v.rid, v.ep_num, v.title, v.length, COUNT(DISTINCT s.uid)
             FROM videos v
             LEFT JOIN sessions s ON v.rid = s.rid AND v.ep_num = s.ep_num
             WHERE v.rid = %s
-            GROUP BY v.rid, v.ep_num, v.title, v.length
-            ORDER BY v.ep_num ASC
+            GROUP BY v.rid, v.ep_num
+            ORDER BY v.rid DESC
         """, (rid,))
-        rows = cursor.fetchall()
-
-        for row in rows:
-            rid = str(row[0])
-            ep_num = str(row[1])
-            title = row[2].strip()
-            length = str(int(row[3]))
-            count = str(int(row[4]))
-            print(",".join([rid, ep_num, title, length, count]))
-
-    except Exception as e:
+        print_result(cursor)
+    except:
         print("Fail")
     finally:
         cursor.close()
