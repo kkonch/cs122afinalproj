@@ -215,10 +215,12 @@ def insert_viewer(args):
         db = connect_db()
         cursor = db.cursor()
 
+
         uid, email, nickname, street, city, state, zip_code, genres, joined_date, first, last, subscription = args
         cursor.execute("INSERT INTO users VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
                (uid, email, joined_date, nickname, street, city, state, zip_code, genres))
-        cursor.execute("INSERT INTO viewers VALUES (%s, %s, %s, %s)", (uid, first, last, subscription))
+        cursor.execute("INSERT INTO viewers VALUES (%s, %s, %s, %s)", (uid, subscription, first, last))
+
 
         db.commit()
         print("Success")
