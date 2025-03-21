@@ -1,13 +1,13 @@
 import sys
+import os
 from datetime import datetime
-
+import csv
 
 try:
     import mysql.connector
 except ModuleNotFoundError:
     print("Fail")
     sys.exit(1)
-
 
 # --- Database connection setup ---
 DB_CONFIG = {
@@ -16,220 +16,179 @@ DB_CONFIG = {
     'database': 'cs122a'
 }
 
-
 def connect_db():
     return mysql.connector.connect(**DB_CONFIG)
-
 
 def print_result(cursor):
     rows = cursor.fetchall()
     for row in rows:
         print(",".join(str(item) for item in row))
 
-
 # --- 1. import ---
-
-
-# Recreate tables (add schema here as per your needs)
 def recreate_tables(cursor):
-    # Example: users table creation
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        uid INT PRIMARY KEY,
+        email VARCHAR(255),
+        joined_date DATE,
+        nickname VARCHAR(255),
+        street VARCHAR(255),
+        city VARCHAR(255),
+        state VARCHAR(255),
+        zip VARCHAR(20),
+        genres TEXT
     );
     """)
-
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS producers (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        country VARCHAR(255)
+        uid INT PRIMARY KEY,
+        bio TEXT,
+        company_name VARCHAR(255),
+        FOREIGN KEY (uid) REFERENCES users(uid)
     );
     """)
-
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS viewers (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL
+        uid INT PRIMARY KEY,
+        subscription ENUM('free', 'monthly', 'yearly'),
+        firstname VARCHAR(255),
+        lastname VARCHAR(255),
+        FOREIGN KEY (uid) REFERENCES users(uid)
     );
     """)
-
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS releases (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        movie_id INT,
+        rid INT PRIMARY KEY,
+        producer_uid INT,
+        title VARCHAR(255),
+        genre VARCHAR(255),
         release_date DATE,
-        FOREIGN KEY (movie_id) REFERENCES movies(id)
+        FOREIGN KEY (producer_uid) REFERENCES producers(uid)
     );
     """)
-
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS movies (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        title VARCHAR(255) NOT NULL,
-        genre VARCHAR(255)
+        rid INT PRIMARY KEY,
+        website_url VARCHAR(255),
+        FOREIGN KEY (rid) REFERENCES releases(rid)
     );
     """)
-
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS series (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        title VARCHAR(255) NOT NULL,
-        genre VARCHAR(255)
+        rid INT PRIMARY KEY,
+        introduction TEXT,
+        FOREIGN KEY (rid) REFERENCES releases(rid)
     );
     """)
-
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS videos (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        title VARCHAR(255) NOT NULL,
-        length INT
+        rid INT,
+        ep_num INT,
+        title VARCHAR(255),
+        length INT,
+        PRIMARY KEY (rid, ep_num),
+        FOREIGN KEY (rid) REFERENCES releases(rid)
     );
     """)
-
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS sessions (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        session_start TIMESTAMP,
-        session_end TIMESTAMP
+        sid INT PRIMARY KEY,
+        uid INT,
+        rid INT,
+        ep_num INT,
+        initiate_at DATETIME,
+        leave_at DATETIME,
+        quality VARCHAR(10),
+        device VARCHAR(20),
+        FOREIGN KEY (uid) REFERENCES users(uid),
+        FOREIGN KEY (rid, ep_num) REFERENCES videos(rid, ep_num)
     );
     """)
-
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS reviews (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        reviewer_id INT,
-        movie_id INT,
-        review_text TEXT,
-        FOREIGN KEY (reviewer_id) REFERENCES viewers(id),
-        FOREIGN KEY (movie_id) REFERENCES movies(id)
+        rvid INT PRIMARY KEY,
+        uid INT,
+        rid INT,
+        rating INT,
+        body TEXT,
+        posted_at DATETIME,
+        FOREIGN KEY (uid) REFERENCES users(uid),
+        FOREIGN KEY (rid) REFERENCES releases(rid)
     );
     """)
 
+# --- 1. import ---
 
-# Import data from CSV and insert manually
 def import_data(folder):
     try:
-        db = connect_db()  # Connect to the database
+        db = connect_db()
         cursor = db.cursor()
+        recreate_tables(cursor)
 
+        # Order matters due to FK constraints
+        table_insert_order = [
+            "users", "producers", "viewers", "releases",
+            "movies", "series", "videos", "sessions", "reviews"
+        ]
 
-        # Step 1: Clear the existing data from all tables
-        tables = ["users", "producers", "viewers", "releases", "movies", "series", "videos", "sessions", "reviews"]
-       
-        for table in tables:
-            cursor.execute(f"DELETE FROM {table};")  # Delete data from each table
-       
-        # Step 2: Recreate the tables
-        recreate_tables(cursor)  # Recreate tables with DDL statements
-       
-        # Step 3: Loop through tables and import data from CSV files
-        for table in tables:
+        for table in table_insert_order:
             filepath = os.path.join(folder, f"{table}.csv")
-           
-            # Check if the file exists
             if not os.path.exists(filepath):
-                print(f"Warning: File {filepath} not found. Skipping this table.")
-                continue  # Skip this table if the file doesn't exist
+                print(f"File {filepath} not found, skipping.")
+                continue
 
+            with open(filepath, newline='', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                headers = next(reader)  # Skip header row
 
-            # Open the CSV file and read its rows
-            with open(filepath, newline='', encoding='utf-8') as csvfile:
-                csvreader = csv.reader(csvfile)
-                next(csvreader)  # Skip the header row
-               
-                for row in csvreader:
-                    # Build the INSERT query for the current table
+                for row in reader:
                     if table == "users":
-                        insert_query = """
-                        INSERT INTO users (name, email)
-                        VALUES (%s, %s);
-                        """
-                        cursor.execute(insert_query, (row[0], row[1]))
-                   
+                        cursor.execute(
+                            "INSERT INTO users (uid, email, joined_date, nickname, street, city, state, zip, genres) "
+                            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)", tuple(row))
                     elif table == "producers":
-                        insert_query = """
-                        INSERT INTO producers (name, country)
-                        VALUES (%s, %s);
-                        """
-                        cursor.execute(insert_query, (row[0], row[1]))
-                   
+                        cursor.execute(
+                            "INSERT INTO producers (uid, bio, company_name) VALUES (%s,%s,%s)", tuple(row))
                     elif table == "viewers":
-                        insert_query = """
-                        INSERT INTO viewers (name, email)
-                        VALUES (%s, %s);
-                        """
-                        cursor.execute(insert_query, (row[0], row[1]))
-                   
+                        cursor.execute(
+                            "INSERT INTO viewers (uid, subscription, firstname, lastname) VALUES (%s,%s,%s,%s)", tuple(row))
                     elif table == "releases":
-                        insert_query = """
-                        INSERT INTO releases (movie_id, release_date)
-                        VALUES (%s, %s);
-                        """
-                        cursor.execute(insert_query, (row[0], row[1]))
-                   
+                        cursor.execute(
+                            "INSERT INTO releases (rid, producer_uid, title, genre, release_date) VALUES (%s,%s,%s,%s,%s)", tuple(row))
                     elif table == "movies":
-                        insert_query = """
-                        INSERT INTO movies (title, genre)
-                        VALUES (%s, %s);
-                        """
-                        cursor.execute(insert_query, (row[0], row[1]))
-                   
+                        cursor.execute(
+                            "INSERT INTO movies (rid, website_url) VALUES (%s,%s)", tuple(row))
                     elif table == "series":
-                        insert_query = """
-                        INSERT INTO series (title, genre)
-                        VALUES (%s, %s);
-                        """
-                        cursor.execute(insert_query, (row[0], row[1]))
-                   
+                        cursor.execute(
+                            "INSERT INTO series (rid, introduction) VALUES (%s,%s)", tuple(row))
                     elif table == "videos":
-                        insert_query = """
-                        INSERT INTO videos (title, length)
-                        VALUES (%s, %s);
-                        """
-                        cursor.execute(insert_query, (row[0], row[1]))
-                   
+                        cursor.execute(
+                            "INSERT INTO videos (rid, ep_num, title, length) VALUES (%s,%s,%s,%s)", tuple(row))
                     elif table == "sessions":
-                        insert_query = """
-                        INSERT INTO sessions (session_start, session_end)
-                        VALUES (%s, %s);
-                        """
-                        cursor.execute(insert_query, (row[0], row[1]))
-                   
+                        cursor.execute(
+                            "INSERT INTO sessions (sid, uid, rid, ep_num, initiate_at, leave_at, quality, device) "
+                            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)", tuple(row))
                     elif table == "reviews":
-                        insert_query = """
-                        INSERT INTO reviews (reviewer_id, movie_id, review_text)
-                        VALUES (%s, %s, %s);
-                        """
-                        cursor.execute(insert_query, (row[0], row[1], row[2]))
+                        cursor.execute(
+                            "INSERT INTO reviews (rvid, uid, rid, rating, body, posted_at) VALUES (%s,%s,%s,%s,%s,%s)", tuple(row))
 
+        db.commit()
+        print("Success")
 
-                db.commit()  # Commit after inserting data for each table
-                print(f"Data loaded into {table} successfully.")
-
-
-        print("Data import completed successfully.")
-
-
-    except mysql.connector.Error as err:
-        print(f"Database connection error: {err}")
+    except Exception as e:
+        print("Fail")
+        print("Error:", e)
     finally:
-        if cursor is not None:
-            cursor.close()
-        if db is not None:
-            db.close()
+        if cursor: cursor.close()
+        if db: db.close()
 
 
 
@@ -237,35 +196,30 @@ def import_data(folder):
 # Example usage:
 # import_data("/path/to/your/csv/folder")
 
-
 # --- 2. insertViewer ---
 def insert_viewer(args):
     try:
         db = connect_db()
         cursor = db.cursor()
 
-
         uid, email, nickname, street, city, state, zip_code, genres, joined_date, first, last, subscription = args
         cursor.execute("INSERT INTO users VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
                        (uid, email, nickname, street, city, state, zip_code, genres, joined_date))
         cursor.execute("INSERT INTO viewers VALUES (%s, %s, %s, %s)", (uid, first, last, subscription))
 
-
         db.commit()
-        print("Success")
+        return "Success"
     except:
-        print("Fail")
+        return "Fail"
     finally:
         cursor.close()
         db.close()
-
 
 # --- 3. addGenre ---
 def add_genre(uid, new_genre):
     try:
         db = connect_db()
         cursor = db.cursor()
-
 
         cursor.execute("SELECT genres FROM users WHERE uid = %s", (uid,))
         result = cursor.fetchone()
@@ -274,15 +228,14 @@ def add_genre(uid, new_genre):
             updated = f"{current_genres};{new_genre}" if current_genres else new_genre
             cursor.execute("UPDATE users SET genres = %s WHERE uid = %s", (updated, uid))
             db.commit()
-            print("Success")
+            return "Success"
         else:
-            print("Fail")
+            return "Fail"
     except:
-        print("Fail")
+        return "Fail"
     finally:
         cursor.close()
         db.close()
-
 
 # --- 4. deleteViewer ---
 def delete_viewer(uid):
@@ -292,13 +245,12 @@ def delete_viewer(uid):
         cursor.execute("DELETE FROM viewers WHERE uid = %s", (uid,))
         cursor.execute("DELETE FROM users WHERE uid = %s", (uid,))
         db.commit()
-        print("Success")
+        return "Success"
     except:
-        print("Fail")
+        return "Fail"
     finally:
         cursor.close()
         db.close()
-
 
 """
 Insert movie
@@ -306,58 +258,60 @@ Insert a new movie in the appropriate table(s). Assume that the corresponding Re
 Input:
 python3 project.py insertMovie [rid:int] [website_url:str]
 
-
 EXAMPLE: python3 project.py insertMovie 1 top-gun.com
 Output:
-    Boolean
+	Boolean
 """
+# --- 5. insertMovie ---
 def insert_movie(rid, website_url):
-
-
-    # Call the function to print all movies
     print_all_movies()
-    #only insert should the rid not alr exist!
     try:
         db = connect_db()
         cursor = db.cursor()
-        cursor.execute("INSERT INTO movies VALUES (%s, %s)", (rid, website_url))
+
+        # Check if the release ID already exists
+        cursor.execute("SELECT 1 FROM releases WHERE rid = %s", (rid,))
+        result = cursor.fetchone()
+
+        if result:
+            print("Release ID already exists, skipping insert.")
+            return "Fail"
+
+        # Insert the movie with the given release ID and website URL
+        cursor.execute("INSERT INTO movies (rid, website_url) VALUES (%s, %s)", (rid, website_url))
         db.commit()
-        return("Success")
-    except:
-        return("Fail")
+        print("Movie inserted successfully.")
+        return "Success"
+    except mysql.connector.Error as err:
+        print(f"Error: {err}")
+        return "Fail"
     finally:
         cursor.close()
         db.close()
+
 def print_all_movies():
     try:
         db = connect_db()  # Connect to the database
         cursor = db.cursor()
 
-
         # Execute a SELECT query to fetch all data from the movies table
         cursor.execute("SELECT * FROM movies")
 
-
         # Fetch all rows from the query result
         rows = cursor.fetchall()
-
 
         # Loop through the rows and print each one
         for row in rows:
             print(row)
 
-
     except mysql.connector.Error as err:
         print(f"Error: {err}")
-
 
     finally:
         if cursor is not None:
             cursor.close()
         if db is not None:
             db.close()
-
-
 
 
 # --- 6. insertSession ---
@@ -367,13 +321,12 @@ def insert_session(args):
         cursor = db.cursor()
         cursor.execute("INSERT INTO sessions VALUES (%s,%s,%s,%s,%s,%s,%s,%s)", args)
         db.commit()
-        print("Success")
+        return "Success"
     except:
-        print("Fail")
+        return "Fail"
     finally:
         cursor.close()
         db.close()
-
 
 # --- 7. updateRelease ---
 def update_release(rid, title):
@@ -382,13 +335,12 @@ def update_release(rid, title):
         cursor = db.cursor()
         cursor.execute("UPDATE releases SET title = %s WHERE rid = %s", (title, rid))
         db.commit()
-        print("Success")
+        return "Success"
     except:
-        print("Fail")
+        return "Fail"
     finally:
         cursor.close()
         db.close()
-
 
 # --- 8. listReleases ---
 def list_releases(uid):
@@ -404,11 +356,10 @@ def list_releases(uid):
         """, (uid,))
         print_result(cursor)
     except:
-        print("Fail")
+        return "Fail"
     finally:
         cursor.close()
         db.close()
-
 
 # --- 9. popularRelease ---
 def popular_release(N):
@@ -425,11 +376,10 @@ def popular_release(N):
         """, (N,))
         print_result(cursor)
     except:
-        print("Fail")
+        return "Fail"
     finally:
         cursor.close()
         db.close()
-
 
 # --- 10. releaseTitle ---
 def release_title(sid):
@@ -446,11 +396,10 @@ def release_title(sid):
         """, (sid,))
         print_result(cursor)
     except:
-        print("Fail")
+        return "Fail"
     finally:
         cursor.close()
         db.close()
-
 
 # --- 11. activeViewer ---
 def active_viewer(N, start, end):
@@ -469,11 +418,10 @@ def active_viewer(N, start, end):
         """, (start, end, N))
         print_result(cursor)
     except:
-        print("Fail")
+        return "Fail"
     finally:
         cursor.close()
         db.close()
-
 
 # --- 12. videosViewed ---
 def videos_viewed(rid):
@@ -490,11 +438,10 @@ def videos_viewed(rid):
         """, (rid,))
         print_result(cursor)
     except:
-        print("Fail")
+        return "Fail"
     finally:
         cursor.close()
         db.close()
-
 
 # --- Main entry point ---
 if __name__ == '__main__':
@@ -503,10 +450,8 @@ if __name__ == '__main__':
         print("No command provided.")
         sys.exit(1)
 
-
     command = args[0]
     params = args[1:]
-
 
     if command == 'import':
         import_data(*params)
@@ -517,7 +462,7 @@ if __name__ == '__main__':
     elif command == 'deleteViewer':
         delete_viewer(params[0])
     elif command == 'insertMovie':
-        insert_movie(params[0], params[1])
+        insert_movie(int(params[0]), params[1])
     elif command == 'insertSession':
         insert_session(params)
     elif command == 'updateRelease':
