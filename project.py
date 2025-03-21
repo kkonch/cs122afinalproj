@@ -450,12 +450,16 @@ def videos_viewed(rid):
         cursor = db.cursor()
         cursor.execute("""
             SELECT v.rid, v.ep_num, v.title, v.length,
-                   COUNT(DISTINCT s.uid) AS viewer_count
+                   IFNULL(viewer_counts.count, 0) AS viewer_count
             FROM videos v
-            LEFT JOIN sessions s ON v.rid = s.rid AND v.ep_num = s.ep_num
+            LEFT JOIN (
+                SELECT s.rid, s.ep_num, COUNT(DISTINCT s.uid) AS count
+                FROM sessions s
+                GROUP BY s.rid, s.ep_num
+            ) AS viewer_counts
+            ON v.rid = viewer_counts.rid AND v.ep_num = viewer_counts.ep_num
             WHERE v.rid = %s
-            GROUP BY v.rid, v.ep_num, v.title, v.length
-            ORDER BY v.rid DESC, v.ep_num ASC, v.title ASC
+            ORDER BY v.rid DESC, v.ep_num ASC
         """, (rid,))
         print_result(cursor)
     except:
@@ -463,6 +467,7 @@ def videos_viewed(rid):
     finally:
         cursor.close()
         db.close()
+
 
 
 # --- Main entry point ---
