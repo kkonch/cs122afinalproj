@@ -468,27 +468,23 @@ def active_viewer(N, start, end):
     try:
         db = connect_db()
         cursor = db.cursor()
-
         cursor.execute("""
-            SELECT s.uid, v.firstname, v.lastname
+            SELECT u.uid, v.firstname, v.lastname
             FROM sessions s
             JOIN viewers v ON s.uid = v.uid
-            JOIN users u ON s.uid = u.uid
-            WHERE s.initiate_at BETWEEN %s AND %s
-            GROUP BY s.uid, v.firstname, v.lastname
+            JOIN users u ON v.uid = u.uid
+            WHERE DATE(s.initiate_at) BETWEEN %s AND %s
+            GROUP BY s.uid
             HAVING COUNT(*) >= %s
             ORDER BY s.uid ASC
-        """, (start, end, int(N)))
-
+        """, (start, end, N))
         print_result(cursor)
-
-    except Exception as e:
-        print("Fail")
-        # print("Error:", e)  # Uncomment to debug locally
+        # print("Success")
+    except:
+        print(" ")
     finally:
         cursor.close()
         db.close()
-
 
 # --- 12. videosViewed ---
 def videos_viewed(rid):
@@ -496,36 +492,19 @@ def videos_viewed(rid):
         db = connect_db()
         cursor = db.cursor()
         cursor.execute("""
-            SELECT v.rid, v.ep_num, v.title,
-                   v.length,
-                   IFNULL(vc.count, 0) AS viewer_count
+            SELECT v.rid, v.ep_num, v.title, v.length, COUNT(DISTINCT s.uid)
             FROM videos v
-            LEFT JOIN (
-                SELECT rid, ep_num, COUNT(DISTINCT uid) AS count
-                FROM sessions
-                GROUP BY rid, ep_num
-            ) vc
-            ON v.rid = vc.rid AND v.ep_num = vc.ep_num
+            LEFT JOIN sessions s ON v.rid = s.rid AND v.ep_num = s.ep_num
             WHERE v.rid = %s
-            ORDER BY v.rid DESC, v.ep_num ASC
+            GROUP BY v.rid, v.ep_num
+            ORDER BY v.rid DESC
         """, (rid,))
-        rows = cursor.fetchall()
-
-        for row in rows:
-            # Clean and format: [rid, ep_num, title, length, count]
-            rid = str(int(row[0]))
-            ep_num = str(int(row[1]))
-            title = row[2].strip()
-            length = str(int(row[3]))
-            count = str(int(row[4]))
-            print(",".join([rid, ep_num, title, length, count]))
-
+        print_result(cursor)
     except:
         print("Fail")
     finally:
         cursor.close()
         db.close()
-
 
 # --- Main entry point ---
 if __name__ == '__main__':
